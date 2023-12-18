@@ -17,7 +17,8 @@ Make sure you have the following installed:
 
 Install the required Python libraries using the following command:
 
-```poetry install
+```bash
+poetry install
 ```
 
 ### Running the Code
