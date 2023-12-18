@@ -1,12 +1,38 @@
 {
-    "main_input_csv": "VOLUMES.csv",
-    "output_csv": "mape_results.csv",
-    "outlier_method": "replace",
-    "filling_method": "zeros",
-    "cross_validation_windows": 2,
-    "start_date_1": "2016-05-01",
-    "end_date_1": "2019-11-30",
-    "start_date_2": "2020-07-01",
-    "end_date_2": "2021-02-16"
+    "main_config": {
+      "main_input_csv": "VOLUMES.csv",
+      "output_csv": "mape_results.csv",
+      "final_output_csv": "final_output.csv",
+      "outlier_method": "replace",
+      "filling_method": "zeros",
+      "cross_validation_windows": 20,
+      "days_before": 30,
+      "start_date_1": "2016-05-01",
+      "end_date_1": "2019-11-30",
+      "start_date_2": "2020-07-01",
+      "end_date_2": "2021-02-16"
+    },
+    "model_config": {
+      "prophet_config": {
+        "covid_start_date": "2020-03-01",
+        "covid_end_date": "2021-03-01"
+      },
+      "tft_config": {
+        "EPOCHS": 20,
+        "INLEN": 32,
+        "HIDDEN": 64,
+        "LSTMLAYERS": 2,
+        "ATTH": 4,
+        "BATCH": 32,
+        "LEARN": 1e-3,
+        "DROPOUT": 0.1,
+        "VALWAIT": 1,
+        "N_FC": 1,
+        "RAND": 42,
+        "N_SAMPLES": 100,
+        "N_JOBS": -1,
+        "QUANTILES": [0.01, 0.1, 0.5, 0.9, 0.99]
+      }
+    }
   }
   
