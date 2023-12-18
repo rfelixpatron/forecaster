@@ -1,0 +1,12 @@
+{
+    "main_input_csv": "VOLUMES.csv",
+    "output_csv": "mape_results.csv",
+    "outlier_method": "replace",
+    "filling_method": "zeros",
+    "cross_validation_windows": 2,
+    "start_date_1": "2016-05-01",
+    "end_date_1": "2019-11-30",
+    "start_date_2": "2020-07-01",
+    "end_date_2": "2021-02-16"
+  }
+  

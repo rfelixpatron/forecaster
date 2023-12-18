@@ -1,26 +1,66 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter
-import logging, sys
-from data.help_functions import read_csv_with_date, handle_outliers, generate_random_dates
-from models.models import baseline_model_predict, rolling_average_model_predict, prophet_model_predict, prophet_model_covid_predict, auto_arima_predict
-from prophet import Prophet
+# Standard library imports
+import logging
+import sys
+from datetime import datetime
+import json
+from typing import List, Callable
 
+# Third-party library imports
+import numpy as np
+import pandas as pd
+
+# Local module imports
+from data.help_functions import (
+    read_csv_with_date,
+    handle_outliers,
+    generate_random_dates,
+)
+from models.models import (
+    baseline_model_predict,
+    rolling_average_model_predict,
+    prophet_model_predict,
+    prophet_model_covid_predict,
+    auto_arima_predict,
+)
+from models.tft_model import tft_model
 from models.evaluation import MAPE
 
+# Setting up logging
 _logger = logging.getLogger("training_logger")
-_logger.setLevel(logging.DEBUG) 
+_logger.setLevel(logging.DEBUG)
 
-def calculate_mape_for_dates(df, random_dates_for_evaluation, model_function):
+
+def load_config():
+    with open('volume_prediction/config.json', 'r') as config_file:
+        config = json.load(config_file)
+
+    return config
+
+
+def calculate_mape_for_dates(df: pd.DataFrame, 
+                              random_dates_for_evaluation: List[datetime], 
+                              model_function: Callable[[pd.DataFrame, datetime], pd.Series]) -> List[float]:
+    """
+    Calculate MAPE for a given model on specified random dates.
+
+    Parameters:
+    - df (pd.DataFrame): The input DataFrame containing 'VOLUME' (target prediction).
+    - random_dates_for_evaluation (List[datetime]): List of dates for evaluation.
+    - model_function (Callable[[pd.DataFrame, datetime], pd.Series]): The function for making model predictions.
+
+    Returns:
+    - List[float]: List of MAPE values.
+    """
     mape_list = []
 
     for date in random_dates_for_evaluation:
         # Check for holidays and weekends
-        if date.day == 25 and date.month == 12 or \
-                date.day == 1 and date.month == 1 or \
-                date.day == 26 and date.month == 12 and date.year == 2016 or \
-                date.weekday() in [5, 6]:  # Saturday and Sunday
+        if (
+            datetime(date.year, 12, 25) == date or
+            datetime(date.year + 1, 1, 1) == date or
+            (datetime(date.year, 12, 26) == date and date.year == 2016) or
+            date.weekday() in [5, 6]  # Saturday and Sunday
+        ):
             continue
 
         # Model prediction
@@ -32,58 +72,68 @@ def calculate_mape_for_dates(df, random_dates_for_evaluation, model_function):
         # Calculate MAPE and append to the list
         mape_list.append(MAPE(test.iloc[0].iloc[0], forecast.iloc[0].iloc[0]))
 
-
     return mape_list
 
 
-
-
 def main():
+    """
+    Main execution function.
+    """
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     _logger.debug("Starting main")
 
+    # Load configuration from file
+    config = load_config()
+
     # LOAD DATA
-    df, _ = read_csv_with_date('VOLUMES.csv', 'zeros')
-    df = handle_outliers(df, method = 'replace')
+    df, _ = read_csv_with_date(config['main_input_csv'], config['filling_method'])
+    df = handle_outliers(df, method=config['outlier_method'])
 
-    cross_validation_windows = 20
+    cross_validation_windows = config['cross_validation_windows']
 
-    random_dates_for_evaluation = generate_random_dates('2016-05-01', '2019-11-30', '2020-07-01', '2021-02-16', cross_validation_windows)
+    random_dates_for_evaluation = generate_random_dates(
+        config['start_date_1'],
+        config['end_date_1'],
+        config['start_date_2'],
+        config['end_date_2'],
+        cross_validation_windows
+    )
 
-    mape_results_baseline = calculate_mape_for_dates(df, random_dates_for_evaluation, model_function=baseline_model_predict)
-    mape_results_rolling = calculate_mape_for_dates(df, random_dates_for_evaluation, model_function=rolling_average_model_predict)
-    mape_results_prophet = calculate_mape_for_dates(df, random_dates_for_evaluation, model_function=prophet_model_predict)
-    mape_results_prophet_covid = calculate_mape_for_dates(df, random_dates_for_evaluation, model_function=prophet_model_covid_predict)
-    mape_results_auto_arima = calculate_mape_for_dates(df, random_dates_for_evaluation, model_function=auto_arima_predict)
-    
+    models = {
+        'Baseline': baseline_model_predict,
+        'Rolling Average': rolling_average_model_predict,
+        'Prophet': prophet_model_predict,
+        'Prophet-COVID': prophet_model_covid_predict,
+        'Auto ARIMA': auto_arima_predict,
+        'TFT': tft_model,
+    }
 
-    print(f'The Baseline model MAPE results for {cross_validation_windows} cross validation windows is: {np.mean(mape_results_baseline):.1f}%')
-    print(f'The Rolling average MAPE results for {cross_validation_windows} cross validation windows is: {np.mean(mape_results_rolling):.1f}%')
-    print(f'The Prophet MAPE results for {cross_validation_windows} cross validation windows is: {np.mean(mape_results_prophet):.1f}%')
-    print(f'The Prophe-COVID MAPE results for {cross_validation_windows} cross validation windows is: {np.mean(mape_results_prophet_covid):.1f}%')
-    print(f'The Auto Arima average MAPE results for {cross_validation_windows} cross validation windows is: {np.mean(mape_results_auto_arima):.1f}%')
+    results = {}
+
+    mape_data = pd.DataFrame()
+
+    for model_name, model_function in models.items():
+        mape_results = calculate_mape_for_dates(df, random_dates_for_evaluation, model_function)
+        avg_mape = np.mean(mape_results)
+        results[model_name] = avg_mape
+
+        # Save mape_results to the DataFrame
+        mape_data[model_name] = mape_results
+
+    # Display results in descending order
+    results_sorted = sorted(results.items(), key=lambda x: x[1], reverse=False)
+    for model_name, avg_mape in results_sorted:
+        print(f'{model_name}: {avg_mape:.1f}%')
+
+    # Save mape_data to a CSV file
+    mape_data.to_csv(f'volume_prediction/data/{config["output_csv"]}', index=False)
+
+    # Display the best model
+    best_model = results_sorted[0][0]
+    print(f'\nThe best model is: {best_model} (MAPE: {results[best_model]:.1f}%)')
 
 
-
-
-
-
-
-
-
-
-    #file_names = ['10YBONDYIELDS', 'EURUSD', 'GOLD', 'SP500', 'VIX']
-    #for file in file_names:
-    #    df_temp, _ = read_csv_with_date(f'{file}.csv', 'zeros')
-    #    df_temp = df_temp.add_prefix(f'{file}_')
-    #    df = pd.merge(df, df_temp, left_index=True, right_index=True, how='left')
-
-    
-
-
-
-  
 if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stdout) 
     main()
 
 
